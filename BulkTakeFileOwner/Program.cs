@@ -5,6 +5,8 @@ using System.IO;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.DirectoryServices.AccountManagement;
+using Microsoft.Win32;
+using System.Windows.Forms;
 
 namespace BulkTakeFileOwner
 {
@@ -14,11 +16,19 @@ namespace BulkTakeFileOwner
         private static string rootDir;
         private static string MYSID = UserPrincipal.Current.Sid.ToString();
 
+        private static bool longPathAware = false;
+
         private static int changed = 0;
         private static int already = 0;
         private static int third = 0;
+        private static int tooLong = 0;
         private static void GetOwnerShip(string path)
         {
+            if (!longPathAware && path.Length > 255)
+            {
+                tooLong++;
+                return;
+            }
             FileSecurity fs = File.GetAccessControl(path);
             string sid = fs.GetOwner(typeof(SecurityIdentifier)).ToString();
             if (sid == OLDUSERSID)
@@ -134,9 +144,43 @@ namespace BulkTakeFileOwner
         {
             if (args.Length == 0)
             {
+                Console.WriteLine("Path required.");
+                Console.WriteLine("Press ENTER to finish.");
+                Console.ReadLine();
                 return;
             }
+            
+            bool cont = false;
+            try
+            {
+                RegistryKey key =
+                    Registry.LocalMachine.OpenSubKey("SYSTEM\\CurrentControlSet\\Control\\FileSystem");
+                if (key.GetValue("LongPathsEnabled").ToString() == "1")
+                {
+                    longPathAware = true;
+                }
 
+            }
+            catch (NullReferenceException e)
+            {
+
+            }
+            finally
+            {
+                if (!longPathAware)
+                {
+                    Console.WriteLine("Warning: MAX_PATH limit is not disabled, file path longer than 255 will not be processed!");
+                    Console.WriteLine("Continue? (y/n)");
+                    string k = Console.ReadLine().Substring(0, 1);
+                    cont = k == "y" || k == "Y";
+                }
+            }
+
+            if (!cont)
+            {
+                return;
+            }
+            
             foreach (var root in args)
             {
                 rootDir = root;
@@ -153,7 +197,10 @@ namespace BulkTakeFileOwner
                     }
                 }
             }
-            Console.WriteLine($"{changed} changed, {third} skipped, {already} already yours");
+
+            string result = $"{changed} changed, {third} skipped, {already} already yours" +
+                            (longPathAware ? "" : $", {tooLong} path too long");
+            Console.WriteLine(result);
             Console.WriteLine("Press ENTER to finish.");
             Console.ReadLine();
         }
