@@ -154,6 +154,7 @@ namespace BulkTakeFileOwner
                 }
             }
             Console.WriteLine($"{changed} changed, {third} skipped, {already} already yours");
+            Console.WriteLine("Press ENTER to finish.");
             Console.ReadLine();
         }
     }
